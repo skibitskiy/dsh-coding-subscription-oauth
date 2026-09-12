@@ -78,6 +78,38 @@ describe("AliasLlmAdapter", () => {
 		expect(inner.seenProvider).toBe("openai-codex");
 	});
 
+	it("sanitizes Grok Build tool schemas and leaves other routes untouched", async () => {
+		const grokInner = new FakeAdapter();
+		const grok = new AliasLlmAdapter(grokInner, new Map([["grok-build", "grok-build"]]));
+		const dirty = {
+			name: "mcp__cua__browser_prepare",
+			description: "prepare",
+			parameters: { type: "object", anyOf: [{ required: ["pid"] }] },
+		};
+		for await (const _chunk of grok.stream({
+			provider: "grok-build",
+			model: "grok-4.6",
+			messages: [],
+			tools: [dirty],
+		} as unknown as GenerateOptions)) {
+			// Empty fake stream.
+		}
+		expect(grokInner.seenOptions?.tools?.[0]?.parameters["anyOf"]).toEqual([{ type: "object", required: ["pid"] }]);
+		expect(dirty.parameters.anyOf[0]).toEqual({ required: ["pid"] });
+
+		const codexInner = new FakeAdapter();
+		const codex = new AliasLlmAdapter(codexInner, new Map([["codex-oauth", "openai-codex"]]));
+		for await (const _chunk of codex.stream({
+			provider: "codex-oauth",
+			model: "m1",
+			messages: [],
+			tools: [dirty],
+		} as unknown as GenerateOptions)) {
+			// Empty fake stream.
+		}
+		expect(codexInner.seenOptions?.tools?.[0]?.parameters).toBe(dirty.parameters);
+	});
+
 	it("normalizes pi-ai replay state at both alias boundaries", async () => {
 		const inner = new FakeAdapter([
 			{

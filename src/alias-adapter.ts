@@ -13,6 +13,8 @@ import type {
 } from "@deepseek-ai/dsh-llm";
 import { LlmAdapter, LlmError } from "@deepseek-ai/dsh-llm";
 import { remapXaiCapacityFailure } from "./grok-errors.ts";
+import { sanitizeGrokToolSchemas } from "./grok-tool-schema.ts";
+import { GROK_BUILD_ROUTE } from "./ids.ts";
 import { remapAuthFailureIfContextOverflow } from "./kimi-errors.ts";
 
 export interface AliasLlmRoutePolicy {
@@ -112,8 +114,14 @@ export class AliasLlmAdapter extends LlmAdapter {
 		const messages = options.messages.map((message) =>
 			normalizeReplayForRoute(message, route, this.replayProviders.get(route) ?? native),
 		);
+		const tools = route === GROK_BUILD_ROUTE ? sanitizeGrokToolSchemas(options.tools) : options.tools;
 		let authFailureNotified = false;
-		for await (const raw of this.inner.stream({ ...options, provider: native, messages })) {
+		for await (const raw of this.inner.stream({
+			...options,
+			provider: native,
+			messages,
+			...(tools === undefined ? {} : { tools }),
+		})) {
 			const chunk =
 				raw.type === "finish" && raw.reason.kind === "error"
 					? {
